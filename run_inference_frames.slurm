@@ -24,8 +24,9 @@ cd "${SLURM_SUBMIT_DIR:-.}"
 mkdir -p "results/$SAMPLE"
 exec 1>"results/$SAMPLE/slurm-${SLURM_JOB_ID}.out" 2>"results/$SAMPLE/slurm-${SLURM_JOB_ID}.err"
 
+CHECKPOINT="/n/netscratch/koumoutsakos_lab/Lab/shared/vitg-384.pt"
 if [ -n "$NUM_FRAMES" ]; then
-  python run_inference_frames.py --frames_dir "inference_data/frames/$SAMPLE" --num_frames "$NUM_FRAMES"
+  python run_inference_frames.py --frames_dir "inference_data/frames/$SAMPLE" --checkpoint "$CHECKPOINT" --num_frames "$NUM_FRAMES"
 else
-  python run_inference_frames.py --frames_dir "inference_data/frames/$SAMPLE"
+  python run_inference_frames.py --frames_dir "inference_data/frames/$SAMPLE" --checkpoint "$CHECKPOINT"
 fi

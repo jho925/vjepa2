@@ -13,6 +13,10 @@ from PIL import Image
 
 import src.datasets.utils.video.transforms as video_transforms
 import src.datasets.utils.video.volume_transforms as volume_transforms
+from src.models.vision_transformer import vit_giant_xformers_rope
+
+# Default checkpoint: shared lab path (download vitg-384.pt there once)
+DEFAULT_CHECKPOINT = "/n/netscratch/koumoutsakos_lab/Lab/shared/vitg-384.pt"
 
 IMAGENET_DEFAULT_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_DEFAULT_STD = (0.229, 0.224, 0.225)
@@ -29,6 +33,14 @@ def build_pt_video_transform(img_size):
             video_transforms.Normalize(mean=IMAGENET_DEFAULT_MEAN, std=IMAGENET_DEFAULT_STD),
         ]
     )
+
+
+def load_pretrained_vjepa_pt_weights(model, pretrained_weights):
+    pretrained_dict = torch.load(pretrained_weights, weights_only=True, map_location="cpu")["encoder"]
+    pretrained_dict = {k.replace("module.", ""): v for k, v in pretrained_dict.items()}
+    pretrained_dict = {k.replace("backbone.", ""): v for k, v in pretrained_dict.items()}
+    msg = model.load_state_dict(pretrained_dict, strict=False)
+    print("Pretrained weights loaded from %s: %s" % (pretrained_weights, msg))
 
 
 def _frame_sort_key(path):
@@ -56,7 +68,7 @@ def load_frames_from_dir(frames_dir):
     return frames
 
 
-def run_inference(frames_dir, output_path, device, num_frames_max=None):
+def run_inference(frames_dir, output_path, device, num_frames_max=None, checkpoint_path=None):
     frames_dir = Path(frames_dir)
     if not frames_dir.is_dir():
         sys.exit("Frames directory not found: %s" % frames_dir)
@@ -67,7 +79,8 @@ def run_inference(frames_dir, output_path, device, num_frames_max=None):
         frames = frames[:num_frames_max]
         print("Using first %d of %d frames." % (len(frames), total_available))
     num_frames = len(frames)
-    print("Loaded %d frames." % num_frames)
+    h, w = frames[0].shape[:2]
+    print("Loaded %d frames. Initial frame size (H, W): %d x %d" % (num_frames, h, w))
     if num_frames == 0:
         sys.exit("No frames to process.")
     img_size = 384
@@ -75,13 +88,19 @@ def run_inference(frames_dir, output_path, device, num_frames_max=None):
     video_tensor = transform(frames)
     x = video_tensor.unsqueeze(0).to(device)
     print("Input shape: %s (B, C, T, H, W)" % (x.shape,))
-    print("Loading V-JEPA 2 1B @ 384 (encoder) from Torch Hub ...")
-    encoder, _ = torch.hub.load(
-        "facebookresearch/vjepa2",
-        "vjepa2_vit_giant_384",
-        pretrained=True,
-        trust_repo=True,
-    )
+    checkpoint_path = Path(checkpoint_path) if checkpoint_path else Path(DEFAULT_CHECKPOINT)
+    if checkpoint_path.exists():
+        print("Loading V-JEPA 2 1B @ 384 (encoder) from %s ..." % checkpoint_path)
+        encoder = vit_giant_xformers_rope(img_size=(384, 384), num_frames=64)
+        load_pretrained_vjepa_pt_weights(encoder, str(checkpoint_path))
+    else:
+        print("Loading V-JEPA 2 1B @ 384 (encoder) from Torch Hub (no checkpoint at %s) ..." % checkpoint_path)
+        encoder, _ = torch.hub.load(
+            "facebookresearch/vjepa2",
+            "vjepa2_vit_giant_384",
+            pretrained=True,
+            trust_repo=True,
+        )
     encoder = encoder.to(device).eval()
     print("Running inference ...")
     with torch.inference_mode():
@@ -98,6 +117,7 @@ def main():
     parser = argparse.ArgumentParser(description="Run V-JEPA 2 1B @ 384 on frames from a directory.")
     parser.add_argument("--frames_dir", default="inference_data/frames/sample_1", help="Directory of frame images (e.g. inference_data/frames/sample_2)")
     parser.add_argument("--num_frames", type=int, default=None, help="Use only the first N frames (default: use all)")
+    parser.add_argument("--checkpoint", default=None, help="Encoder checkpoint .pt (default: %s)" % DEFAULT_CHECKPOINT)
     parser.add_argument("-o", "--output", default=None, help="Path to save features (default: results/<sample_name>/features.pt)")
     parser.add_argument("--device", default=None, help="cuda or cpu (default: auto)")
     args = parser.parse_args()
@@ -105,7 +125,13 @@ def main():
     if args.output is None:
         sample_name = Path(args.frames_dir).name
         args.output = "results/%s/features.pt" % sample_name
-    run_inference(args.frames_dir, args.output, device, num_frames_max=args.num_frames)
+    run_inference(
+        args.frames_dir,
+        args.output,
+        device,
+        num_frames_max=args.num_frames,
+        checkpoint_path=args.checkpoint or DEFAULT_CHECKPOINT,
+    )
 
 
 if __name__ == "__main__":

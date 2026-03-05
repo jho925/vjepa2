@@ -11,7 +11,11 @@ This guide explains how to run **`run_inference_frames.py`** (V-JEPA 2 1B @ 384 
   - `inference_data/frames/sample_1/`
   - `inference_data/frames/sample_2/`
 - **Frame names:** Use the pattern `a.000000.png`, `a.000001.png`, … (sorted by numeric suffix). Supported: `.jpg`, `.jpeg`, `.png`, `.bmp`, `.webp`.
-- **Model:** The script loads the 1B @ 384 model from **Torch Hub** (downloads automatically; needs network on first run).
+- **Model:** The script loads the 1B @ 384 encoder from **`/n/netscratch/koumoutsakos_lab/Lab/shared/vitg-384.pt`** if that file exists; otherwise it falls back to **Torch Hub**. To use the shared model once, download it there:
+  ```bash
+  mkdir -p /n/netscratch/koumoutsakos_lab/Lab/shared
+  wget -O /n/netscratch/koumoutsakos_lab/Lab/shared/vitg-384.pt https://dl.fbaipublicfiles.com/vjepa2/vitg-384.pt
+  ```
 
 ---
 
@@ -100,6 +104,6 @@ scancel -u $USER        # cancel all your jobs
 ## 3. Model and behavior
 
 - **Model:** V-JEPA 2 1B @ 384 (ViT-giant, 384×384), encoder only.
-- **Loaded via:** Torch Hub (`facebookresearch/vjepa2`, `vjepa2_vit_giant_384`). First run will download weights.
+- **Loaded via:** Local path `/n/netscratch/koumoutsakos_lab/Lab/shared/vitg-384.pt` if present; else Torch Hub.
 - **Input:** Frames are resized, center-cropped to 384×384, and ImageNet-normalized. Variable number of frames is supported (e.g. 51).
 - **Output:** Encoder features (no prediction of future frames; feature extraction only).
