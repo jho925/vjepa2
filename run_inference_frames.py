@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Run V-JEPA 2 1B @ 384 on frames from a directory.
 # Expected frame names: a.000000.png, a.000001.png, a.000002.png, ... (sorted by numeric suffix).
-# Usage: from vjepa2 root: python run_inference_frames.py [--frames_dir inference_data/frames] [--output results/features.pt]
+# Usage: from vjepa2 root: python run_inference_frames.py [--frames_dir inference_data/frames/sample_1] [--output results/features.pt]
 
 import argparse
 import sys
@@ -56,20 +56,26 @@ def load_frames_from_dir(frames_dir):
     return frames
 
 
-def run_inference(frames_dir, output_path, device):
+def run_inference(frames_dir, output_path, device, num_frames_max=None):
     frames_dir = Path(frames_dir)
     if not frames_dir.is_dir():
         sys.exit("Frames directory not found: %s" % frames_dir)
     print("Loading frames from %s ..." % frames_dir)
     frames = load_frames_from_dir(frames_dir)
+    total_available = len(frames)
+    if num_frames_max is not None:
+        frames = frames[:num_frames_max]
+        print("Using first %d of %d frames." % (len(frames), total_available))
     num_frames = len(frames)
     print("Loaded %d frames." % num_frames)
+    if num_frames == 0:
+        sys.exit("No frames to process.")
     img_size = 384
     transform = build_pt_video_transform(img_size)
     video_tensor = transform(frames)
     x = video_tensor.unsqueeze(0).to(device)
     print("Input shape: %s (B, C, T, H, W)" % (x.shape,))
-    print("Loading V-JEPA 2 1B @ 384 (encoder) ...")
+    print("Loading V-JEPA 2 1B @ 384 (encoder) from Torch Hub ...")
     encoder, _ = torch.hub.load(
         "facebookresearch/vjepa2",
         "vjepa2_vit_giant_384",
@@ -90,12 +96,16 @@ def run_inference(frames_dir, output_path, device):
 
 def main():
     parser = argparse.ArgumentParser(description="Run V-JEPA 2 1B @ 384 on frames from a directory.")
-    parser.add_argument("--frames_dir", default="inference_data/frames", help="Directory of frame images")
-    parser.add_argument("-o", "--output", default="results/features.pt", help="Path to save features (.pt)")
+    parser.add_argument("--frames_dir", default="inference_data/frames/sample_1", help="Directory of frame images (e.g. inference_data/frames/sample_2)")
+    parser.add_argument("--num_frames", type=int, default=None, help="Use only the first N frames (default: use all)")
+    parser.add_argument("-o", "--output", default=None, help="Path to save features (default: results/<sample_name>/features.pt)")
     parser.add_argument("--device", default=None, help="cuda or cpu (default: auto)")
     args = parser.parse_args()
     device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
-    run_inference(args.frames_dir, args.output, device)
+    if args.output is None:
+        sample_name = Path(args.frames_dir).name
+        args.output = "results/%s/features.pt" % sample_name
+    run_inference(args.frames_dir, args.output, device, num_frames_max=args.num_frames)
 
 
 if __name__ == "__main__":
