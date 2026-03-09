@@ -18,6 +18,7 @@ run_pretrain.py
 
 *.egg-info/
 *.ipynb_checkpoints/
+*checkpoint/
 
 traces/
 third_party/*

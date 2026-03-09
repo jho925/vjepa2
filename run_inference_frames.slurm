@@ -1,8 +1,8 @@
 #!/bin/bash
-# Usage: sbatch run_inference_frames.slurm [sample_name] [num_frames]
-# Example: sbatch run_inference_frames.slurm sample_1
-# Example: sbatch run_inference_frames.slurm sample_2 32
-# Logs go to results/<sample_name>/slurm-<jobid>.{out,err}
+# Usage: sbatch run_inference_frames.slurm <frames_dir> [output_name] [num_frames]
+# Output: results/<output_name>/features.pt (default output_name = last dir of frames_dir)
+# Example: sbatch run_inference_frames.slurm /path/to/periodicHill/frames periodicHill
+# Example: sbatch run_inference_frames.slurm inference_data/frames/sample_1 sample_1 32
 #SBATCH --job-name=vjepa2-infer
 #SBATCH --output=/dev/null
 #SBATCH --error=/dev/null
@@ -13,20 +13,20 @@
 #SBATCH -t 0-01:00
 #SBATCH --account=koumoutsakos_lab
 
-SAMPLE="${1:-sample_1}"
-NUM_FRAMES="${2:-}"
+FRAMES_DIR="${1:?Usage: sbatch run_inference_frames.slurm <frames_dir> [output_name] [num_frames]}"
+OUTNAME="${2:-$(basename "${FRAMES_DIR%/}")}"
+NUM_FRAMES="${3:-}"
+CHECKPOINT="/n/netscratch/koumoutsakos_lab/Lab/shared/vitg-384.pt"
 
-# See https://docs.rc.fas.harvard.edu/kb/running-jobs/
 source "$HOME/miniconda3/etc/profile.d/conda.sh"
 conda activate vjepa
 
 cd "${SLURM_SUBMIT_DIR:-.}"
-mkdir -p "results/$SAMPLE"
-exec 1>"results/$SAMPLE/slurm-${SLURM_JOB_ID}.out" 2>"results/$SAMPLE/slurm-${SLURM_JOB_ID}.err"
+mkdir -p "results/$OUTNAME"
+exec 1>"results/$OUTNAME/slurm-${SLURM_JOB_ID}.out" 2>"results/$OUTNAME/slurm-${SLURM_JOB_ID}.err"
 
-CHECKPOINT="/n/netscratch/koumoutsakos_lab/Lab/shared/vitg-384.pt"
 if [ -n "$NUM_FRAMES" ]; then
-  python run_inference_frames.py --frames_dir "inference_data/frames/$SAMPLE" --checkpoint "$CHECKPOINT" --num_frames "$NUM_FRAMES"
+  python run_inference_frames.py --frames_dir "$FRAMES_DIR" --checkpoint "$CHECKPOINT" -o "results/$OUTNAME/features.pt" --num_frames "$NUM_FRAMES"
 else
-  python run_inference_frames.py --frames_dir "inference_data/frames/$SAMPLE" --checkpoint "$CHECKPOINT"
+  python run_inference_frames.py --frames_dir "$FRAMES_DIR" --checkpoint "$CHECKPOINT" -o "results/$OUTNAME/features.pt"
 fi
